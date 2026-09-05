@@ -128,6 +128,21 @@
   }
   .pk { color: var(--ink-2); }
 
+  tr.weekhead td {
+    background: var(--hover);
+    border-bottom: 1px solid var(--rule);
+    padding-top: 9px; padding-bottom: 9px;
+    position: sticky; top: 0; z-index: 1;
+    backdrop-filter: blur(6px);
+  }
+  tr.weekhead span:first-child {
+    font-weight: 600; font-size: 13px; letter-spacing: 0.01em;
+  }
+  tr.weekhead .range {
+    color: var(--ink-muted); font-size: 12px; margin-left: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .delta { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
   .delta.up { color: var(--up); }
   .delta.down { color: var(--down); }
@@ -186,6 +201,8 @@
   </div>
 
   <div class="controls" id="controls" hidden>
+    <label class="sort" for="week">Week</label>
+    <select id="week"></select>
     <label class="sort" for="sort">Sort</label>
     <select id="sort">
       <option value="kickoff">Kickoff time</option>
@@ -236,7 +253,10 @@
   var HISTORY_LIMIT = 14;      // snapshots pulled when a row is expanded
   var bust = "?t=" + Date.now();
 
-  var state = { games: [], prev: null, dates: [], cache: {}, sort: "kickoff" };
+  var state = {
+    games: [], prev: null, dates: [], cache: {}, sort: "kickoff",
+    week: "all", weeks: [], weekCounts: {}, anchor: null
+  };
 
   function getJSON(path) {
     return fetch(path + bust).then(function (r) {
@@ -374,6 +394,76 @@
     });
   }
 
+  // ---- NFL weeks -----------------------------------------------------------
+  // A week runs Tuesday noon UTC to the next Tuesday noon UTC: safely after
+  // Monday Night Football ends and well before Thursday's kickoff, so no game
+  // ever lands on a boundary. Week 1 is anchored to the season's first game
+  // rather than a hardcoded calendar, so this keeps working next season.
+  var DAY = 86400000;
+
+  function weekAnchor(games) {
+    var first = null;
+    games.forEach(function (g) {
+      var t = Date.parse(g.commence_time);
+      if (!isNaN(t) && (first === null || t < first)) first = t;
+    });
+    if (first === null) return null;
+    var d = new Date(first);
+    var a = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0);
+    a -= ((new Date(a).getUTCDay() - 2 + 7) % 7) * DAY;   // back to Tuesday
+    if (a > first) a -= 7 * DAY;
+    return a;
+  }
+
+  function weekOf(g) {
+    if (state.anchor === null) return null;
+    var t = Date.parse(g.commence_time);
+    if (isNaN(t)) return null;
+    return Math.floor((t - state.anchor) / (7 * DAY)) + 1;
+  }
+
+  function weekRange(w) {
+    var s = new Date(state.anchor + (w - 1) * 7 * DAY + 2 * DAY);  // Thu-ish
+    var e = new Date(state.anchor + w * 7 * DAY - DAY);
+    var f = { month: "short", day: "numeric" };
+    return s.toLocaleDateString(undefined, f) + " – " + e.toLocaleDateString(undefined, f);
+  }
+
+  function buildWeeks() {
+    state.anchor = weekAnchor(state.games);
+    var seen = {};
+    state.games.forEach(function (g) {
+      var w = weekOf(g);
+      if (w !== null) seen[w] = (seen[w] || 0) + 1;
+    });
+    state.weeks = Object.keys(seen).map(Number).sort(function (a, b) { return a - b; });
+    state.weekCounts = seen;
+
+    // Default to the week holding the next game that hasn't kicked off yet.
+    var now = Date.now(), pick = null;
+    state.games.forEach(function (g) {
+      var t = Date.parse(g.commence_time);
+      if (isNaN(t) || t < now) return;
+      var w = weekOf(g);
+      if (w !== null && (pick === null || w < pick)) pick = w;
+    });
+    state.week = pick !== null ? String(pick) : (state.weeks.length ? String(state.weeks[0]) : "all");
+
+    var sel = document.getElementById("week");
+    sel.innerHTML = '<option value="all">All weeks</option>'
+      + state.weeks.map(function (w) {
+          return '<option value="' + w + '">Week ' + w + " · " + weekRange(w)
+            + " (" + seen[w] + ")</option>";
+        }).join("");
+    sel.value = state.week;
+  }
+
+  function visible() {
+    if (state.week === "all") return state.games;
+    var w = +state.week;
+    return state.games.filter(function (g) { return weekOf(g) === w; });
+  }
+
   function sorted(games) {
     var copy = games.slice();
     var by = state.sort;
@@ -386,20 +476,42 @@
     else if (by === "total-move") copy.sort(function (a, b) { return move(b, "total") - move(a, "total"); });
     else if (by === "total") copy.sort(function (a, b) { return (b.total || 0) - (a.total || 0); });
     else copy.sort(function (a, b) { return (a.commence_time || "").localeCompare(b.commence_time || ""); });
+
+    // Grouped view: week order wins, the chosen sort orders games inside each
+    // week. Array.sort is stable, so this second pass preserves that.
+    if (state.week === "all") {
+      copy.sort(function (a, b) { return (weekOf(a) || 0) - (weekOf(b) || 0); });
+    }
     return copy;
   }
 
   function render() {
     var tbody = document.getElementById("rows");
-    var games = sorted(state.games);
+    var games = sorted(visible());
     if (!games.length) {
       tbody.innerHTML = '<tr><td colspan="6"><div class="state">'
-        + "No games on the board right now.</div></td></tr>";
+        + "No games on the board for this week.</div></td></tr>";
       return;
     }
 
+    // In "All weeks" the list is grouped under week headers; a single week
+    // needs no header, the selector already says which one you're looking at.
+    var grouping = state.week === "all";
+    var lastWeek = null;
+
     var html = "";
     games.forEach(function (g, i) {
+      if (grouping) {
+        var w = weekOf(g);
+        if (w !== lastWeek) {
+          lastWeek = w;
+          html += '<tr class="weekhead"><td colspan="6">'
+            + "<span>Week " + w + "</span>"
+            + '<span class="range">' + weekRange(w) + "</span>"
+            + '<span class="range">' + state.weekCounts[w] + " games</span>"
+            + "</td></tr>";
+        }
+      }
       var p = prevGame(g.id);
       var hasTotal = g.total !== null && g.total !== undefined;
       var awayFav = g.away_spread !== null && g.away_spread < 0;
@@ -464,15 +576,19 @@
   }
 
   function renderTiles() {
-    var games = state.games;
+    var games = visible();
     document.getElementById("tiles").hidden = false;
     document.getElementById("t-games").textContent = games.length;
 
-    var next = games.slice().sort(function (a, b) {
+    var now = Date.now();
+    var next = games.slice().filter(function (g) {
+      var t = Date.parse(g.commence_time); return !isNaN(t) && t >= now;
+    }).sort(function (a, b) {
       return (a.commence_time || "").localeCompare(b.commence_time || "");
     })[0];
-    document.getElementById("t-games-note").textContent =
-      next ? "Next: " + kickoff(next.commence_time) : "";
+    document.getElementById("t-games-note").textContent = next
+      ? "Next: " + kickoff(next.commence_time)
+      : state.games.length + " on the full board";
 
     function biggest(key) {
       var best = null;
@@ -522,9 +638,10 @@
     }).catch(function () { return null; });
   }).then(function (prev) {
     state.prev = prev;
+    document.getElementById("controls").hidden = false;
+    buildWeeks();
     renderTiles();
     render();
-    document.getElementById("controls").hidden = false;
   }).catch(function (err) {
     fail("No data yet — run the <code>Refresh NFL lines</code> workflow from the Actions tab, "
       + "then reload this page. (" + err.message + ")");
@@ -532,6 +649,12 @@
 
   document.getElementById("sort").addEventListener("change", function (e) {
     state.sort = e.target.value;
+    render();
+  });
+
+  document.getElementById("week").addEventListener("change", function (e) {
+    state.week = e.target.value;
+    renderTiles();
     render();
   });
 
