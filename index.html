@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NFL Lines — DraftKings</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:        #f9f9f7;
+    --surface:      #fcfcfb;
+    --ink:          #0b0b0b;
+    --ink-2:        #52514e;
+    --ink-muted:    #898781;
+    --grid:         #e1e0d9;
+    --rule:         #c3c2b7;
+    --border:       rgba(11,11,11,0.10);
+    --hover:        rgba(11,11,11,0.035);
+    --up:           #e34948;
+    --down:         #2a78d6;
+    --series-1:     #2a78d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:      #0d0d0d;
+      --surface:    #1a1a19;
+      --ink:        #ffffff;
+      --ink-2:      #c3c2b7;
+      --ink-muted:  #898781;
+      --grid:       #2c2c2a;
+      --rule:       #383835;
+      --border:     rgba(255,255,255,0.10);
+      --hover:      rgba(255,255,255,0.05);
+      --up:         #e66767;
+      --down:       #3987e5;
+      --series-1:   #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
+    --ink-muted: #898781; --grid: #2c2c2a; --rule: #383835;
+    --border: rgba(255,255,255,0.10); --hover: rgba(255,255,255,0.05);
+    --up: #e66767; --down: #3987e5; --series-1: #3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 20px 64px;
+    background: var(--plane);
+    color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  header { margin-bottom: 24px; }
+  h1 {
+    margin: 0 0 6px;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .sub { color: var(--ink-2); font-size: 13px; margin: 0; }
+  .sub .dot { color: var(--ink-muted); margin: 0 7px; }
+
+  .tiles { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 18px; }
+  .tile {
+    flex: 1 1 150px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .tile .label {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--ink-muted); margin-bottom: 5px;
+  }
+  .tile .value { font-size: 22px; font-weight: 600; line-height: 1.15; }
+  .tile .note { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
+
+  .controls {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; flex-wrap: wrap;
+  }
+  label.sort { font-size: 13px; color: var(--ink-2); }
+  select, button.ghost {
+    font: inherit; font-size: 13px;
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 9px; cursor: pointer;
+  }
+  button.ghost:hover, select:hover { background: var(--hover); }
+  .spacer { flex: 1; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .scroller { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 620px; }
+  th, td { padding: 11px 14px; text-align: left; }
+  thead th {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--ink-muted);
+    border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody tr { border-bottom: 1px solid var(--grid); }
+  tbody tr:last-child { border-bottom: 0; }
+  tbody tr.game:hover { background: var(--hover); }
+  tbody tr.game { cursor: pointer; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kick { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+  .price { color: var(--ink-muted); font-size: 12px; margin-left: 5px; }
+
+  /* Two stacked sides per game: away on top, home below. */
+  td.sides { padding-top: 9px; padding-bottom: 9px; }
+  .side { line-height: 1.7; }
+  .side.fav { font-weight: 600; }
+  .team { font-weight: 500; }
+  .venue {
+    color: var(--ink-muted); font-size: 11px; letter-spacing: 0.04em;
+    text-transform: uppercase; margin-right: 6px;
+  }
+  .pk { color: var(--ink-2); }
+
+  .delta { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+  .delta.up { color: var(--up); }
+  .delta.down { color: var(--down); }
+  .delta.flat { color: var(--ink-muted); }
+  .delta .arrow { font-size: 11px; margin-right: 1px; }
+
+  tr.detail td { padding: 0 14px 16px; background: transparent; }
+  tr.detail.hidden { display: none; }
+  .spark-row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+  .spark-block .spark-label {
+    font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 6px;
+  }
+  .spark-empty { font-size: 13px; color: var(--ink-2); }
+  svg.spark { display: block; overflow: visible; }
+  svg.spark .line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  svg.spark .end { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; }
+  svg.spark .hit { fill: transparent; cursor: pointer; }
+  svg.spark .base { stroke: var(--grid); stroke-width: 1; }
+
+  .state { padding: 40px 16px; text-align: center; color: var(--ink-2); }
+  .state code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; background: var(--hover); padding: 1px 5px; border-radius: 4px;
+  }
+  footer { margin-top: 18px; font-size: 12px; color: var(--ink-muted); }
+  .legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .key { display: inline-flex; align-items: center; gap: 5px; }
+  .key .arrow { font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>NFL Lines — DraftKings</h1>
+    <p class="sub" id="meta">Loading…</p>
+  </header>
+
+  <div class="tiles" id="tiles" hidden>
+    <div class="tile">
+      <div class="label">Games on the board</div>
+      <div class="value" id="t-games">—</div>
+      <div class="note" id="t-games-note"></div>
+    </div>
+    <div class="tile">
+      <div class="label">Biggest spread move</div>
+      <div class="value" id="t-spread">—</div>
+      <div class="note" id="t-spread-note"></div>
+    </div>
+    <div class="tile">
+      <div class="label">Biggest total move</div>
+      <div class="value" id="t-total">—</div>
+      <div class="note" id="t-total-note"></div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls" hidden>
+    <label class="sort" for="sort">Sort</label>
+    <select id="sort">
+      <option value="kickoff">Kickoff time</option>
+      <option value="spread-move">Biggest spread move</option>
+      <option value="total-move">Biggest total move</option>
+      <option value="total">Highest total</option>
+    </select>
+    <div class="spacer"></div>
+    <button class="ghost" id="theme" type="button">Toggle theme</button>
+  </div>
+
+  <div class="card">
+    <div class="scroller">
+      <table>
+        <thead>
+          <tr>
+            <th>Matchup</th>
+            <th>Kickoff</th>
+            <th class="num">Spread</th>
+            <th class="num">Move</th>
+            <th class="num">Total</th>
+            <th class="num">Move</th>
+          </tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="6"><div class="state" id="state">Loading lines…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    <div class="legend">
+      <span class="key"><span class="arrow" style="color:var(--up)">▲</span> line moved up</span>
+      <span class="key"><span class="arrow" style="color:var(--down)">▼</span> line moved down</span>
+      <span class="key" style="color:var(--ink-muted)"><strong style="font-weight:600">Bold</strong> = favorite</span>
+      <span class="key" style="color:var(--ink-muted)">@ away · vs home</span>
+      <span class="key" style="color:var(--ink-muted)">Click a row for line history</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var HISTORY_LIMIT = 14;      // snapshots pulled when a row is expanded
+  var bust = "?t=" + Date.now();
+
+  var state = { games: [], prev: null, dates: [], cache: {}, sort: "kickoff" };
+
+  function getJSON(path) {
+    return fetch(path + bust).then(function (r) {
+      if (!r.ok) throw new Error(path + " -> HTTP " + r.status);
+      return r.json();
+    });
+  }
+
+  function nick(team) {
+    if (!team) return "—";
+    var parts = team.trim().split(/\s+/);
+    return parts[parts.length - 1];
+  }
+
+  function signed(n, places) {
+    if (n === null || n === undefined) return "—";
+    var s = n.toFixed(places === undefined ? 1 : places);
+    return n > 0 ? "+" + s : s;
+  }
+
+  function price(p) {
+    if (p === null || p === undefined) return "";
+    return '<span class="price">' + (p > 0 ? "+" + p : p) + "</span>";
+  }
+
+  function kickoff(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso);
+    if (isNaN(d)) return "—";
+    return d.toLocaleString(undefined, {
+      weekday: "short", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "2-digit"
+    });
+  }
+
+  // One side's spread number: "-4.0 -110", or "PK" at a pick'em.
+  function sideSpread(line, p) {
+    if (line === null || line === undefined) return "—";
+    if (line === 0) return '<span class="pk">PK</span>' + price(p);
+    return signed(line) + price(p);
+  }
+
+  function deltaCell(now, then, places) {
+    if (now === null || now === undefined || then === null || then === undefined) {
+      return '<span class="delta flat">—</span>';
+    }
+    var d = +(now - then).toFixed(2);
+    if (d === 0) return '<span class="delta flat">—</span>';
+    var cls = d > 0 ? "up" : "down";
+    var arrow = d > 0 ? "▲" : "▼";
+    return '<span class="delta ' + cls + '"><span class="arrow">' + arrow + "</span>"
+      + signed(d, places === undefined ? 1 : places) + "</span>";
+  }
+
+  function prevGame(id) {
+    if (!state.prev) return null;
+    for (var i = 0; i < state.prev.games.length; i++) {
+      if (state.prev.games[i].id === id) return state.prev.games[i];
+    }
+    return null;
+  }
+
+  function sparkline(values, labels, fmt) {
+    var pts = [];
+    for (var i = 0; i < values.length; i++) {
+      if (values[i] !== null && values[i] !== undefined) pts.push({ i: i, v: values[i] });
+    }
+    if (pts.length < 2) return '<div class="spark-empty">Not enough history yet.</div>';
+
+    var W = 180, H = 44, pad = 6;
+    var lo = Math.min.apply(null, pts.map(function (p) { return p.v; }));
+    var hi = Math.max.apply(null, pts.map(function (p) { return p.v; }));
+    var span = (hi - lo) || 1;
+    var n = values.length - 1 || 1;
+
+    function X(i) { return pad + (i / n) * (W - pad * 2); }
+    function Y(v) { return H - pad - ((v - lo) / span) * (H - pad * 2); }
+
+    var d = pts.map(function (p, k) {
+      return (k ? "L" : "M") + X(p.i).toFixed(1) + " " + Y(p.v).toFixed(1);
+    }).join(" ");
+
+    var hits = pts.map(function (p) {
+      var t = (labels[p.i] || "") + ": " + fmt(p.v);
+      return '<circle class="hit" cx="' + X(p.i).toFixed(1) + '" cy="' + Y(p.v).toFixed(1)
+        + '" r="7"><title>' + t + "</title></circle>";
+    }).join("");
+
+    var last = pts[pts.length - 1];
+    return '<svg class="spark" width="' + W + '" height="' + H + '" role="img" aria-label="'
+      + fmt(lo) + " to " + fmt(hi) + '">'
+      + '<path class="line" d="' + d + '"/>'
+      + '<circle class="end" cx="' + X(last.i).toFixed(1) + '" cy="' + Y(last.v).toFixed(1) + '" r="3.5"/>'
+      + hits
+      + "</svg>"
+      + '<div class="spark-empty" style="margin-top:5px">'
+      + fmt(pts[0].v) + " → " + fmt(last.v)
+      + '<span style="color:var(--ink-muted)"> · ' + labels[pts[0].i] + " to " + labels[last.i]
+      + "</span></div>";
+  }
+
+  function loadHistory(game, cell) {
+    var id = game.id;
+    var dates = state.dates.slice(-HISTORY_LIMIT);
+    Promise.all(dates.map(function (d) {
+      if (state.cache[d]) return Promise.resolve(state.cache[d]);
+      return getJSON("data/" + d + ".json")
+        .then(function (j) { state.cache[d] = j; return j; })
+        .catch(function () { return null; });
+    })).then(function (snaps) {
+      var away = [], home = [], totals = [], labels = [];
+      snaps.forEach(function (s, i) {
+        labels.push(dates[i]);
+        var g = null;
+        if (s && s.games) {
+          for (var k = 0; k < s.games.length; k++) {
+            if (s.games[k].id === id) { g = s.games[k]; break; }
+          }
+        }
+        away.push(g ? g.away_spread : null);
+        home.push(g ? g.home_spread : null);
+        totals.push(g ? g.total : null);
+      });
+
+      var sp = function (v) { return signed(v); };
+      cell.innerHTML =
+        '<div class="spark-row">'
+        + '<div class="spark-block"><div class="spark-label">' + nick(game.away_team)
+        + " spread</div>" + sparkline(away, labels, sp) + "</div>"
+        + '<div class="spark-block"><div class="spark-label">' + nick(game.home_team)
+        + " spread</div>" + sparkline(home, labels, sp) + "</div>"
+        + '<div class="spark-block"><div class="spark-label">Total</div>'
+        + sparkline(totals, labels, function (v) { return v.toFixed(1); }) + "</div>"
+        + "</div>";
+    });
+  }
+
+  function sorted(games) {
+    var copy = games.slice();
+    var by = state.sort;
+    function move(g, key) {
+      var p = prevGame(g.id);
+      if (!p || g[key] === null || p[key] === null) return -1;
+      return Math.abs(g[key] - p[key]);
+    }
+    if (by === "spread-move") copy.sort(function (a, b) { return move(b, "home_spread") - move(a, "home_spread"); });
+    else if (by === "total-move") copy.sort(function (a, b) { return move(b, "total") - move(a, "total"); });
+    else if (by === "total") copy.sort(function (a, b) { return (b.total || 0) - (a.total || 0); });
+    else copy.sort(function (a, b) { return (a.commence_time || "").localeCompare(b.commence_time || ""); });
+    return copy;
+  }
+
+  function render() {
+    var tbody = document.getElementById("rows");
+    var games = sorted(state.games);
+    if (!games.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="state">'
+        + "No games on the board right now.</div></td></tr>";
+      return;
+    }
+
+    var html = "";
+    games.forEach(function (g, i) {
+      var p = prevGame(g.id);
+      var hasTotal = g.total !== null && g.total !== undefined;
+      var awayFav = g.away_spread !== null && g.away_spread < 0;
+      var homeFav = g.home_spread !== null && g.home_spread < 0;
+
+      html += '<tr class="game" data-idx="' + i + '" data-id="' + g.id + '">'
+
+        // Matchup — away listed first, sportsbook style.
+        + '<td class="sides">'
+        + '<div class="side' + (awayFav ? " fav" : "") + '">'
+        + '<span class="venue">@</span><span class="team">' + nick(g.away_team) + "</span></div>"
+        + '<div class="side' + (homeFav ? " fav" : "") + '">'
+        + '<span class="venue">vs</span><span class="team">' + nick(g.home_team) + "</span></div>"
+        + "</td>"
+
+        + '<td class="kick">' + kickoff(g.commence_time) + "</td>"
+
+        // Both sides of the spread.
+        + '<td class="sides num">'
+        + '<div class="side' + (awayFav ? " fav" : "") + '">'
+        + sideSpread(g.away_spread, g.away_spread_price) + "</div>"
+        + '<div class="side' + (homeFav ? " fav" : "") + '">'
+        + sideSpread(g.home_spread, g.home_spread_price) + "</div>"
+        + "</td>"
+
+        // The two sides move in opposite directions, so each gets its own cue.
+        + '<td class="sides num">'
+        + '<div class="side">' + deltaCell(g.away_spread, p ? p.away_spread : null) + "</div>"
+        + '<div class="side">' + deltaCell(g.home_spread, p ? p.home_spread : null) + "</div>"
+        + "</td>"
+
+        // Over and under carry the same number at different prices.
+        + '<td class="sides num">'
+        + '<div class="side">' + (hasTotal
+            ? '<span class="venue">O</span>' + g.total.toFixed(1) + price(g.over_price) : "—") + "</div>"
+        + '<div class="side">' + (hasTotal
+            ? '<span class="venue">U</span>' + g.total.toFixed(1) + price(g.under_price) : "") + "</div>"
+        + "</td>"
+
+        + '<td class="sides num"><div class="side">'
+        + deltaCell(g.total, p ? p.total : null) + "</div></td>"
+        + "</tr>"
+
+        + '<tr class="detail hidden" data-detail="' + i + '"><td colspan="6">'
+        + '<div class="spark-empty">Loading history…</div></td></tr>';
+    });
+    tbody.innerHTML = html;
+
+    tbody.querySelectorAll("tr.game").forEach(function (row) {
+      row.addEventListener("click", function () {
+        var idx = row.getAttribute("data-idx");
+        var detail = tbody.querySelector('tr[data-detail="' + idx + '"]');
+        var cell = detail.querySelector("td");
+        var opening = detail.classList.contains("hidden");
+        detail.classList.toggle("hidden");
+        if (opening && !detail.dataset.loaded) {
+          detail.dataset.loaded = "1";
+          loadHistory(games[+idx], cell);
+        }
+      });
+    });
+  }
+
+  function renderTiles() {
+    var games = state.games;
+    document.getElementById("tiles").hidden = false;
+    document.getElementById("t-games").textContent = games.length;
+
+    var next = games.slice().sort(function (a, b) {
+      return (a.commence_time || "").localeCompare(b.commence_time || "");
+    })[0];
+    document.getElementById("t-games-note").textContent =
+      next ? "Next: " + kickoff(next.commence_time) : "";
+
+    function biggest(key) {
+      var best = null;
+      games.forEach(function (g) {
+        var p = prevGame(g.id);
+        if (!p || g[key] === null || p[key] === null) return;
+        var d = +(g[key] - p[key]).toFixed(2);
+        if (d === 0) return;
+        if (!best || Math.abs(d) > Math.abs(best.d)) best = { g: g, d: d };
+      });
+      return best;
+    }
+
+    var sm = biggest("home_spread");
+    document.getElementById("t-spread").textContent = sm
+      ? nick(sm.g.home_team) + " " + signed(sm.d) : "—";
+    document.getElementById("t-spread-note").textContent = sm
+      ? nick(sm.g.away_team) + " at " + nick(sm.g.home_team)
+      : (state.prev ? "No movement yet" : "Needs a second day of data");
+
+    var tm = biggest("total");
+    document.getElementById("t-total").textContent = tm ? signed(tm.d) : "—";
+    document.getElementById("t-total-note").textContent = tm
+      ? nick(tm.g.away_team) + " at " + nick(tm.g.home_team)
+      : (state.prev ? "No movement yet" : "Needs a second day of data");
+  }
+
+  function fail(msg) {
+    document.getElementById("meta").textContent = "Couldn't load line data.";
+    document.getElementById("rows").innerHTML =
+      '<tr><td colspan="6"><div class="state">' + msg + "</div></td></tr>";
+  }
+
+  getJSON("data/latest.json").then(function (latest) {
+    state.games = latest.games || [];
+    var when = new Date(latest.fetched_at);
+    document.getElementById("meta").innerHTML =
+      "Updated " + (isNaN(when) ? latest.fetched_at : when.toLocaleString())
+      + '<span class="dot">•</span>' + state.games.length + " games"
+      + '<span class="dot">•</span>spreads and totals from DraftKings';
+
+    return getJSON("data/index.json").then(function (idx) {
+      state.dates = idx.dates || [];
+      var prior = state.dates.filter(function (d) { return d !== latest.date; });
+      if (!prior.length) return null;
+      return getJSON("data/" + prior[prior.length - 1] + ".json").catch(function () { return null; });
+    }).catch(function () { return null; });
+  }).then(function (prev) {
+    state.prev = prev;
+    renderTiles();
+    render();
+    document.getElementById("controls").hidden = false;
+  }).catch(function (err) {
+    fail("No data yet — run the <code>Refresh NFL lines</code> workflow from the Actions tab, "
+      + "then reload this page. (" + err.message + ")");
+  });
+
+  document.getElementById("sort").addEventListener("change", function (e) {
+    state.sort = e.target.value;
+    render();
+  });
+
+  document.getElementById("theme").addEventListener("click", function () {
+    var root = document.documentElement;
+    var dark = root.getAttribute("data-theme") === "dark"
+      || (!root.hasAttribute("data-theme")
+          && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    root.setAttribute("data-theme", dark ? "light" : "dark");
+  });
+})();
+</script>
+</body>
+</html>
